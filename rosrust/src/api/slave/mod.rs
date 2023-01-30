@@ -22,6 +22,7 @@ pub struct Slave {
     pub subscriptions: subscriptions::SubscriptionsTracker,
     pub services: Arc<Mutex<HashMap<String, Service>>>,
     pub shutdown_tx: kill::Sender,
+    pub param_callbacks : Arc<Mutex<Vec<Arc<dyn Fn()->() + Send + Sync>>>>
 }
 
 type SerdeResult<T> = Result<T>;
@@ -34,11 +35,12 @@ impl Slave {
         port: u16,
         name: &str,
         shutdown_manager: Arc<ShutdownManager>,
+        param_callbacks : Arc<Mutex<Vec<Arc<dyn Fn()->() + Send + Sync>>>>
     ) -> Result<Slave> {
         use std::net::ToSocketAddrs;
 
         let (shutdown_tx, shutdown_rx) = kill::channel(kill::KillMode::Sync);
-        let handler = SlaveHandler::new(master_uri, hostname, name, shutdown_tx.clone());
+        let handler = SlaveHandler::new(master_uri, hostname, name, shutdown_tx.clone(), param_callbacks.clone());
         let publications = handler.publications.clone();
         let subscriptions = handler.subscriptions.clone();
         let services = Arc::clone(&handler.services);
@@ -74,6 +76,7 @@ impl Slave {
             subscriptions,
             services,
             shutdown_tx,
+            param_callbacks : param_callbacks
         })
     }
 

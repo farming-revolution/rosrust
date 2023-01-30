@@ -11,6 +11,7 @@ use ctrlc;
 use error_chain::bail;
 use lazy_static::lazy_static;
 use ros_message::{Duration, Time};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::thread;
 use std::time;
@@ -222,5 +223,10 @@ where
 pub fn log(level: i8, msg: String, file: &str, line: u32) {
     ros!().log(level, msg, file, line)
 }
+
+pub fn subscribe_param<'a, T: Deserialize<'a>>(key : &str, callback: std::sync::Arc<dyn Fn()->() + Send + Sync>) -> () {
+    ros!().subscribe_param::<T>(key, callback);
+}
+
 
 static UNINITIALIZED: &str = "ROS uninitialized. Please run ros::init(name) first!";

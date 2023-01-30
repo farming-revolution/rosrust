@@ -29,6 +29,7 @@ impl SlaveHandler {
         hostname: &str,
         name: &str,
         shutdown_signal: kill::Sender,
+        param_callbacks : Arc<Mutex<Vec<Arc<dyn Fn()->() + Send + Sync>>>>
     ) -> SlaveHandler {
         let mut server = Server::default();
 
@@ -103,8 +104,12 @@ impl SlaveHandler {
             ))
         });
 
-        server.register_value("paramUpdate", "Parameter updated", |_args| {
-            // We don't do anything with parameter updates
+        server.register_value("paramUpdate", "Parameter updated", move |_args| {
+            let callbacks = param_callbacks.lock().unwrap();
+            println!("number of callbacks {}", callbacks.len());
+            for cb in callbacks.iter() {
+                cb();
+            }
             Ok(Value::Int(0))
         });
 

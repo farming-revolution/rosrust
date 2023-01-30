@@ -109,6 +109,7 @@ impl Ros {
             0,
             &name,
             Arc::clone(&shutdown_manager),
+            Default::default()
         )?;
         let master = Master::new(master_uri, &name, slave.uri())?;
 
@@ -193,6 +194,10 @@ impl Ros {
 
     pub fn parameters(&self) -> Response<Vec<String>> {
         self.master.get_param_names()
+    }
+
+    pub fn add_param_callback(&self, callback: Arc<dyn Fn()->() + Send + Sync>) -> () {
+        self.slave.param_callbacks.lock().unwrap().push(callback);
     }
 
     pub fn state(&self) -> Response<master::SystemState> {
@@ -344,6 +349,12 @@ impl Ros {
             queue_size,
             message_description,
         )
+    }
+
+    pub(crate) fn subscribe_param<'a, T: Deserialize<'a>>(&self, key : &str, callback: Arc<dyn Fn()->() + Send + Sync>) -> () {
+        self.master.subscribe_param::<T>(key).unwrap();
+        let mut callbacks = self.slave.param_callbacks.lock().unwrap();
+        callbacks.push(callback);
     }
 
     fn log_to_terminal(&self, level: i8, msg: &str, file: &str, line: u32) {
