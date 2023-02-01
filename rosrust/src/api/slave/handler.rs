@@ -106,7 +106,6 @@ impl SlaveHandler {
 
         server.register_value("paramUpdate", "Parameter updated", move |_args| {
             let callbacks = param_callbacks.lock().unwrap();
-            println!("number of callbacks {}", callbacks.len());
             for cb in callbacks.iter() {
                 cb();
             }
