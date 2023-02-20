@@ -351,10 +351,11 @@ impl Ros {
         )
     }
 
-    pub(crate) fn subscribe_param<'a, T: Deserialize<'a>>(&self, key : &str, callback: Arc<dyn Fn()->() + Send + Sync>) -> () {
-        self.master.subscribe_param::<T>(key).unwrap();
+    pub(crate) fn subscribe_param<'a, T: Deserialize<'a>>(&self, key : &str, callback: Arc<dyn Fn()->() + Send + Sync>) -> Result<()> {
+        self.master.subscribe_param::<T>(key)?;
         let mut callbacks = self.slave.param_callbacks.lock().unwrap();
         callbacks.push(callback);
+        Ok(())
     }
 
     fn log_to_terminal(&self, level: i8, msg: &str, file: &str, line: u32) {
