@@ -224,8 +224,9 @@ pub fn log(level: i8, msg: String, file: &str, line: u32) {
     ros!().log(level, msg, file, line)
 }
 
-pub fn subscribe_param<'a, T: Deserialize<'a>>(key : &str, callback: std::sync::Arc<dyn Fn()->() + Send + Sync>) -> () {
-    ros!().subscribe_param::<T>(key, callback);
+pub fn subscribe_param<'a, T: Deserialize<'a>>(key : &str, callback: std::sync::Arc<dyn Fn()->() + Send + Sync>) -> Result<()> {
+    ros!().subscribe_param::<T>(key, callback)?;
+    Ok(())
 }
 
 
