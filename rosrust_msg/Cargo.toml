@@ -10,6 +10,9 @@ version = "0.1.6"
 build = "build.rs"
 
 [dependencies]
+serde = "1.0.127"
+serde_derive = "1.0.127"
+serde-big-array = "0.5.1"
 
 [dependencies.rosrust]
 path = "../rosrust"

@@ -43,7 +43,10 @@ pub fn depend_on_messages(
         } else {
             quote! { rosrust:: }
         });
-    (quote! {#output}).into()
+    (quote! {
+        extern crate serde_derive;
+        #output
+    }).into()
 }
 
 fn append_share_folder(path: &str) -> Option<String> {

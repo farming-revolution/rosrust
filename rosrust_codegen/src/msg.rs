@@ -74,7 +74,7 @@ impl Msg {
             .collect::<Vec<_>>();
         quote! {
             #[allow(dead_code, non_camel_case_types, non_snake_case)]
-            #[derive(Clone)]
+            #[derive(Clone, serde_derive::Serialize, serde_derive::Deserialize)]
             pub struct #name {
                 #(#fields)*
             }
@@ -240,7 +240,10 @@ fn field_info_field_token_stream<T: ToTokens>(
     match field_info.case() {
         FieldCase::Unit => quote! { pub #name: #datatype, },
         FieldCase::Vector => quote! { pub #name: Vec<#datatype>, },
-        FieldCase::Array(l) => quote! { pub #name: [#datatype; #l], },
+        FieldCase::Array(l) => quote! { 
+            #[serde(with = "serde_big_array::BigArray")]
+            pub #name: [#datatype; #l],
+        },
         FieldCase::Const(_) => quote! {},
     }
 }
