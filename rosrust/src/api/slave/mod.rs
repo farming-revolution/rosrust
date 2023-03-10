@@ -22,7 +22,7 @@ pub struct Slave {
     pub subscriptions: subscriptions::SubscriptionsTracker,
     pub services: Arc<Mutex<HashMap<String, Service>>>,
     pub shutdown_tx: kill::Sender,
-    pub param_callbacks : Arc<Mutex<Vec<Arc<dyn Fn()->() + Send + Sync>>>>
+    pub param_callbacks : Arc<Mutex<Vec<(String, Arc<dyn Fn()->() + Send + Sync>)>>>
 }
 
 type SerdeResult<T> = Result<T>;
@@ -35,7 +35,7 @@ impl Slave {
         port: u16,
         name: &str,
         shutdown_manager: Arc<ShutdownManager>,
-        param_callbacks : Arc<Mutex<Vec<Arc<dyn Fn()->() + Send + Sync>>>>
+        param_callbacks : Arc<Mutex<Vec<(String, Arc<dyn Fn()->() + Send + Sync>)>>>
     ) -> Result<Slave> {
         use std::net::ToSocketAddrs;
 

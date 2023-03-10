@@ -29,7 +29,7 @@ impl SlaveHandler {
         hostname: &str,
         name: &str,
         shutdown_signal: kill::Sender,
-        param_callbacks : Arc<Mutex<Vec<Arc<dyn Fn()->() + Send + Sync>>>>
+        param_callbacks : Arc<Mutex<Vec<(String, Arc<dyn Fn()->() + Send + Sync>)>>>
     ) -> SlaveHandler {
         let mut server = Server::default();
 
@@ -104,10 +104,22 @@ impl SlaveHandler {
             ))
         });
 
-        server.register_value("paramUpdate", "Parameter updated", move |_args| {
+        server.register_value("paramUpdate", "Parameter updated", move |args| {
+            let param_name = &args[1];
+            let param_name_raw = match param_name {
+                Value::String(v) => v,
+                _ => {eprintln!("error in param update callback"); return Err(ResponseError::Client("cannot read param name".into()))}
+            };
+            let param_name = param_name_raw.trim_end_matches('/');
+            
             let callbacks = param_callbacks.lock().unwrap();
-            for cb in callbacks.iter() {
-                cb();
+            dbg!(&args);
+            
+            for (subscribed_param_name, cb) in callbacks.iter() {
+                if subscribed_param_name.as_str() == param_name {
+                    println!("prefix: '{subscribed_param_name}'\npointer: {:p}", &*cb);
+                    cb();
+                }
             }
             Ok(Value::Int(0))
         });

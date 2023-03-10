@@ -197,7 +197,7 @@ impl Ros {
     }
 
     pub fn add_param_callback(&self, callback: Arc<dyn Fn()->() + Send + Sync>) -> () {
-        self.slave.param_callbacks.lock().unwrap().push(callback);
+        self.slave.param_callbacks.lock().unwrap().push(("".into(), callback));
     }
 
     pub fn state(&self) -> Response<master::SystemState> {
@@ -353,8 +353,10 @@ impl Ros {
 
     pub(crate) fn subscribe_param<'a, T: Deserialize<'a>>(&self, key : &str, callback: Arc<dyn Fn()->() + Send + Sync>) -> Result<()> {
         self.master.subscribe_param::<T>(key)?;
+        let key = self.resolver.translate(key)?;
+        
         let mut callbacks = self.slave.param_callbacks.lock().unwrap();
-        callbacks.push(callback);
+        callbacks.push((key, callback));
         Ok(())
     }
 
