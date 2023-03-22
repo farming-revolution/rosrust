@@ -113,7 +113,6 @@ impl SlaveHandler {
             let param_name = param_name_raw.trim_end_matches('/');
             
             let callbacks = param_callbacks.lock().unwrap();
-            dbg!(&args);
             
             for (subscribed_param_name, cb) in callbacks.iter() {
                 if subscribed_param_name.as_str() == param_name {
