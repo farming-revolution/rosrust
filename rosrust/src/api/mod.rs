@@ -35,3 +35,9 @@ impl ShutdownManager {
         self.should_shutdown.store(true, Ordering::Relaxed)
     }
 }
+
+impl Drop for ShutdownManager {
+    fn drop(&mut self) {
+        self.shutdown()
+    }
+}

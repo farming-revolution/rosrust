@@ -17,3 +17,4 @@ members = [
 "rosrust_diagnostics" = { path = "rosrust_diagnostics" }
 "ros_message" = { path = "ros_message" }
 "examples" = { path = "examples" }
+"xml-rpc" = { path = "../xml-rpc-rs" }

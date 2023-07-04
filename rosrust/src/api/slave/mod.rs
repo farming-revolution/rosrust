@@ -66,9 +66,7 @@ impl Slave {
                     Ok(_) | Err(TryRecvError::Disconnected) => break,
                     Err(TryRecvError::Empty) => {}
                 }
-                bound_handler.poll();
-                // TODO: use a timed out poll once rouille provides it
-                std::thread::sleep(std::time::Duration::from_millis(5));
+                bound_handler.poll_timeout(std::time::Duration::from_millis(500));
             }
             shutdown_manager.shutdown();
         });
@@ -182,5 +180,11 @@ impl Slave {
     #[inline]
     pub fn get_publisher_uris_of_subscription(&self, topic: &str) -> Vec<String> {
         self.subscriptions.publisher_uris(topic)
+    }
+}
+
+impl Drop for Slave {
+    fn drop(&mut self) {
+        self.shutdown_tx.send().unwrap();
     }
 }

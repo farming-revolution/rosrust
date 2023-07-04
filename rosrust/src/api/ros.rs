@@ -123,7 +123,7 @@ impl Ros {
             &name,
             Arc::clone(&param_cache),
             Arc::clone(&shutdown_manager),
-            Default::default()
+            Arc::new(Mutex::new(Vec::new()))
         )?;
         let master = Master::new(master_uri, &name, slave.uri())?;
 
@@ -140,6 +140,7 @@ impl Ros {
             logger,
             shutdown_manager,
         })
+        
     }
 
     fn map(&mut self, source: &str, destination: &str) -> Result<()> {

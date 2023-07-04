@@ -8,11 +8,11 @@ pub enum Feedback {
     StopAccepting,
 }
 
-pub fn iterate<F>(listener: TcpListener, tag: String, handler: F)
+pub fn iterate<F>(listener: TcpListener, tag: String, handler: F) -> thread::JoinHandle<()>
 where
     F: Fn(TcpStream) -> Feedback + Send + 'static,
 {
-    thread::spawn(move || listener_thread(&listener, &tag, handler));
+    thread::spawn(move || listener_thread(&listener, &tag, handler))
 }
 
 fn listener_thread<F>(connections: &TcpListener, tag: &str, handler: F)
@@ -26,7 +26,14 @@ where
                 Feedback::StopAccepting => break,
             },
             Err(err) => {
-                error!("TCP connection failed at {}: {}", tag, err);
+                if err.kind() == std::io::ErrorKind::InvalidInput {
+                    // Got EINVAL, quitting listener thread. This happens after
+                    // Publisher.drop() calls libc::shutdown on the TcpListener's
+                    // file descriptor. When the publisher is dropped, we can stop
+                    // accepting new connections here, and end the thread.
+                    return;
+                }
+                error!("TCP connection failed at {}: {}", &tag, &err);
             }
         }
     }

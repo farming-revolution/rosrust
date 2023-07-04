@@ -168,7 +168,6 @@ impl SlaveHandler {
                 }
             }
 
-// >>>>>>> upstream/master
             Ok(Value::Int(0))
         });
 

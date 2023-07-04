@@ -10,6 +10,7 @@ use log::error;
 use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{atomic, Arc, Mutex};
+use std::os::fd::AsRawFd;
 
 pub struct Publisher {
     subscriptions: DataStream,
@@ -18,11 +19,15 @@ pub struct Publisher {
     last_message: Arc<Mutex<Arc<Vec<u8>>>>,
     queue_size: usize,
     exists: Arc<atomic::AtomicBool>,
+    raw_fd : i32,
+    join_handle: Option<std::thread::JoinHandle<()>>
 }
 
 impl Drop for Publisher {
     fn drop(&mut self) {
         self.exists.store(false, atomic::Ordering::SeqCst);
+        unsafe { libc::shutdown(self.raw_fd, libc::SHUT_RD); }
+        self.join_handle.take().unwrap().join().unwrap();
     }
 }
 
@@ -138,6 +143,7 @@ impl Publisher {
         U: ToSocketAddrs,
     {
         let listener = TcpListener::bind(address)?;
+        let raw_fd = listener.as_raw_fd();
         let socket_address = listener.local_addr()?;
 
         let publisher_exists = Arc::new(atomic::AtomicBool::new(true));
@@ -168,7 +174,7 @@ impl Publisher {
             }
         };
 
-        tcpconnection::iterate(listener, format!("topic '{}'", topic), iterate_handler);
+        let join_handle = Some(tcpconnection::iterate(listener, format!("topic '{}'", topic), iterate_handler));
 
         let topic = Topic {
             name: String::from(topic),
@@ -183,6 +189,8 @@ impl Publisher {
             last_message,
             queue_size,
             exists: publisher_exists,
+            raw_fd,
+            join_handle
         })
     }
 
