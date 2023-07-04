@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 mod clock;
 pub mod error;
+pub mod handlers;
 mod master;
 mod naming;
 pub mod raii;
@@ -13,23 +14,24 @@ mod ros;
 mod slave;
 
 pub struct ShutdownManager {
+    handler: Box<dyn Fn() + Send + Sync>,
     should_shutdown: AtomicBool,
 }
 
-impl Default for ShutdownManager {
-    fn default() -> Self {
+impl ShutdownManager {
+    pub fn new(handler: impl Fn() + Send + Sync + 'static) -> Self {
         Self {
+            handler: Box::new(handler),
             should_shutdown: AtomicBool::new(false),
         }
     }
-}
 
-impl ShutdownManager {
     pub fn awaiting_shutdown(&self) -> bool {
         self.should_shutdown.load(Ordering::Relaxed)
     }
 
     pub fn shutdown(&self) {
+        (*self.handler)();
         self.should_shutdown.store(true, Ordering::Relaxed)
     }
 }

@@ -2,7 +2,7 @@ use super::publications::PublicationsTracker;
 use super::subscriptions::SubscriptionsTracker;
 use crate::rosxmlrpc::{self, Response, ResponseError, Server};
 use crate::tcpros::Service;
-use crate::util::kill;
+use crate::util::{kill, FAILED_TO_LOCK};
 use log::{error, info};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -17,17 +17,26 @@ pub struct SlaveHandler {
 }
 
 fn unwrap_array_case(params: Params) -> Params {
-    if let Some(&Value::Array(ref items)) = params.get(0) {
+    if let Some(Value::Array(items)) = params.get(0) {
         return items.clone();
     }
     params
 }
+
+#[derive(Default)]
+pub struct ParamCacheState {
+    pub data: HashMap<String, Response<Value>>,
+    pub subscribed: bool,
+}
+
+pub type ParamCache = Arc<Mutex<ParamCacheState>>;
 
 impl SlaveHandler {
     pub fn new(
         master_uri: &str,
         hostname: &str,
         name: &str,
+        param_cache: ParamCache,
         shutdown_signal: kill::Sender,
         param_callbacks : Arc<Mutex<Vec<(String, Arc<dyn Fn()->() + Send + Sync>)>>>
     ) -> SlaveHandler {
@@ -68,7 +77,9 @@ impl SlaveHandler {
             }
         });
 
-        server.register_value("getPid", "PID", |_args| Ok(Value::Int(std::process::id() as i32)));
+        server.register_value("getPid", "PID", |_args| {
+            Ok(Value::Int(std::process::id() as i32))
+        });
 
         let subscriptions = SubscriptionsTracker::default();
         let subs = subscriptions.clone();
@@ -105,21 +116,59 @@ impl SlaveHandler {
         });
 
         server.register_value("paramUpdate", "Parameter updated", move |args| {
-            let param_name = &args[1];
-            let param_name_raw = match param_name {
-                Value::String(v) => v,
-                _ => {eprintln!("error in param update callback"); return Err(ResponseError::Client("cannot read param name".into()))}
+// <<<<<<< HEAD
+//             let param_name = &args[1];
+//             let param_name_raw = match param_name {
+//                 Value::String(v) => v,
+//                 _ => {eprintln!("error in param update callback"); return Err(ResponseError::Client("cannot read param name".into()))}
+//             };
+//             let param_name = param_name_raw.trim_end_matches('/');
+            
+//             let callbacks = param_callbacks.lock().unwrap();
+            
+//             for (subscribed_param_name, cb) in callbacks.iter() {
+//                 if subscribed_param_name.as_str() == param_name {
+//                     println!("prefix: '{subscribed_param_name}'\npointer: {:p}", &*cb);
+//                     cb();
+//                 }
+//             }
+// =======
+            let mut args = unwrap_array_case(args).into_iter();
+            let _caller_id = args
+                .next()
+                .ok_or_else(|| ResponseError::Client("Missing argument 'caller_id'".into()))?;
+            let parameter_key = match args.next() {
+                Some(Value::String(parameter_key)) => parameter_key,
+                _ => {
+                    return Err(ResponseError::Client(
+                        "Missing argument 'parameter_key'".into(),
+                    ))
+                }
             };
-            let param_name = param_name_raw.trim_end_matches('/');
-            
-            let callbacks = param_callbacks.lock().unwrap();
-            
+            let _parameter_value = match args.next() {
+                Some(parameter_value) => parameter_value,
+                _ => {
+                    return Err(ResponseError::Client(
+                        "Missing argument 'parameter_key'".into(),
+                    ))
+                }
+            };
+            let key = parameter_key.trim_end_matches('/');
+            param_cache
+                .lock()
+                .expect(FAILED_TO_LOCK)
+                .data
+                .retain(|k, _| !k.starts_with(key) && !key.starts_with(k));
+
+            let callbacks = param_callbacks.lock().unwrap();            
             for (subscribed_param_name, cb) in callbacks.iter() {
-                if subscribed_param_name.as_str() == param_name {
-                    println!("prefix: '{subscribed_param_name}'\npointer: {:p}", &*cb);
+                if subscribed_param_name.as_str() == key {
+                    //println!("prefix: '{subscribed_param_name}'\npointer: {:p}", &*cb);
                     cb();
                 }
             }
+
+// >>>>>>> upstream/master
             Ok(Value::Int(0))
         });
 
@@ -188,7 +237,7 @@ impl SlaveHandler {
             let mut has_tcpros = false;
             for protocol in protocols {
                 if let Value::Array(protocol) = protocol {
-                    if let Some(&Value::String(ref name)) = protocol.get(0) {
+                    if let Some(Value::String(name)) = protocol.get(0) {
                         has_tcpros |= name == "TCPROS";
                     }
                 }

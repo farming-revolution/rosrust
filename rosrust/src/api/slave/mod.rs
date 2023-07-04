@@ -2,12 +2,13 @@ mod handler;
 mod publications;
 mod subscriptions;
 
+pub use self::handler::ParamCache;
 use self::handler::SlaveHandler;
 use super::error::{self, ErrorKind, Result};
 use crate::api::ShutdownManager;
 use crate::tcpros::{Message, PublisherStream, Service, ServicePair, ServiceResult};
 use crate::util::{kill, FAILED_TO_LOCK};
-use crate::RawMessageDescription;
+use crate::{RawMessageDescription, SubscriptionHandler};
 use crossbeam::channel::TryRecvError;
 use error_chain::bail;
 use log::error;
@@ -34,13 +35,16 @@ impl Slave {
         bind_address: &str,
         port: u16,
         name: &str,
+        param_cache: ParamCache,
         shutdown_manager: Arc<ShutdownManager>,
         param_callbacks : Arc<Mutex<Vec<(String, Arc<dyn Fn()->() + Send + Sync>)>>>
     ) -> Result<Slave> {
         use std::net::ToSocketAddrs;
 
         let (shutdown_tx, shutdown_rx) = kill::channel(kill::KillMode::Sync);
-        let handler = SlaveHandler::new(master_uri, hostname, name, shutdown_tx.clone(), param_callbacks.clone());
+        let handler =
+            SlaveHandler::new(master_uri, hostname, name, param_cache, shutdown_tx.clone(), param_callbacks.clone());
+
         let publications = handler.publications.clone();
         let subscriptions = handler.subscriptions.clone();
         let services = Arc::clone(&handler.services);
@@ -151,20 +155,18 @@ impl Slave {
     }
 
     #[inline]
-    pub fn add_subscription<T, F, G>(
+    pub fn add_subscription<T, H>(
         &self,
         topic: &str,
         queue_size: usize,
-        on_message: F,
-        on_connect: G,
+        handler: H,
     ) -> Result<usize>
     where
         T: Message,
-        F: Fn(T, &str) + Send + 'static,
-        G: Fn(HashMap<String, String>) + Send + 'static,
+        H: SubscriptionHandler<T>,
     {
         self.subscriptions
-            .add(&self.name, topic, queue_size, on_message, on_connect)
+            .add(&self.name, topic, queue_size, handler)
     }
 
     #[inline]

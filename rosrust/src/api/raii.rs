@@ -2,11 +2,12 @@ use super::clock::Clock;
 use super::error::Result;
 use super::master::Master;
 use super::slave::Slave;
+use crate::api::SystemState;
+use crate::error::ErrorKind;
 use crate::rosxmlrpc::Response;
 use crate::tcpros::{Message, PublisherStream, ServicePair, ServiceResult};
-use crate::RawMessageDescription;
+use crate::{RawMessageDescription, SubscriptionHandler};
 use log::error;
-use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -15,7 +16,7 @@ pub struct Publisher<T: Message> {
     clock: Arc<dyn Clock>,
     seq: Arc<AtomicUsize>,
     stream: PublisherStream<T>,
-    _raii: Arc<InteractorRaii<PublisherInfo>>,
+    raii: Arc<InteractorRaii<PublisherInfo>>,
 }
 
 impl<T: Message> Publisher<T> {
@@ -51,7 +52,7 @@ impl<T: Message> Publisher<T> {
             stream,
             clock,
             seq: Arc::new(AtomicUsize::new(0)),
-            _raii: raii,
+            raii,
         })
     }
 
@@ -73,6 +74,37 @@ impl<T: Message> Publisher<T> {
     #[inline]
     pub fn set_queue_size(&mut self, queue_size: usize) {
         self.stream.set_queue_size(queue_size);
+    }
+
+    /// Wait until all the subscribers reported by rosmaster have connected
+    #[inline]
+    pub fn wait_for_subscribers(&self, timeout: Option<std::time::Duration>) -> Result<()> {
+        let timeout = timeout.map(|v| std::time::Instant::now() + v);
+        let iteration_time = std::time::Duration::from_millis(50);
+        loop {
+            let system_state: SystemState = self.raii.interactor.master.get_system_state()?.into();
+            let mut master_subs = system_state
+                .subscribers
+                .into_iter()
+                .find(|v| v.name == self.raii.interactor.name)
+                .map(|v| v.connections)
+                .unwrap_or_default();
+            master_subs.sort();
+            let mut local_subs = self.subscriber_names();
+            local_subs.sort();
+            if master_subs == local_subs {
+                return Ok(());
+            }
+            let now = std::time::Instant::now();
+            let mut wait_time = iteration_time;
+            if let Some(timeout) = &timeout {
+                let time_left = timeout
+                    .checked_duration_since(now)
+                    .ok_or(ErrorKind::TimeoutError)?;
+                wait_time = wait_time.min(time_left);
+            }
+            std::thread::sleep(wait_time);
+        }
     }
 
     #[inline]
@@ -101,20 +133,18 @@ pub struct Subscriber {
 }
 
 impl Subscriber {
-    pub(crate) fn new<T, F, G>(
+    pub(crate) fn new<T, H>(
         master: Arc<Master>,
         slave: Arc<Slave>,
         name: &str,
         queue_size: usize,
-        on_message: F,
-        on_connect: G,
+        handler: H,
     ) -> Result<Self>
     where
         T: Message,
-        F: Fn(T, &str) + Send + 'static,
-        G: Fn(HashMap<String, String>) + Send + 'static,
+        H: SubscriptionHandler<T>,
     {
-        let id = slave.add_subscription::<T, F, G>(name, queue_size, on_message, on_connect)?;
+        let id = slave.add_subscription::<T, H>(name, queue_size, handler)?;
 
         let info = Arc::new(InteractorRaii::new(SubscriberInfo {
             master,

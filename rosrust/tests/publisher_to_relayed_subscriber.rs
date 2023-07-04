@@ -9,7 +9,7 @@ mod msg {
 
 #[test]
 fn publisher_to_relayed_subscriber() {
-    let _roscore = util::run_roscore_for(util::Language::Shell, util::Feature::Publisher);
+    let _roscore = util::run_roscore_for(util::TestVariant::PublisherToRelayedSubscriber);
     let _subscriber = util::ChildProcessTerminator::spawn(
         Command::new("rosrun")
             .arg("topic_tools")
@@ -29,6 +29,7 @@ fn publisher_to_relayed_subscriber() {
         .unwrap();
 
     let publisher = rosrust::publish::<msg::std_msgs::String>("chatter_pub", 100).unwrap();
+    publisher.wait_for_subscribers(None).unwrap();
 
     let message = msg::std_msgs::String {
         data: "hello world".into(),

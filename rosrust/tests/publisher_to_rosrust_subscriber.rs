@@ -9,7 +9,7 @@ mod msg {
 
 #[test]
 fn publisher_to_rosrust_subscriber() {
-    let _roscore = util::run_roscore_for(util::Language::Rust, util::Feature::Publisher);
+    let _roscore = util::run_roscore_for(util::TestVariant::PublisherToRosrustSubscriber);
     let _subscriber = util::ChildProcessTerminator::spawn_example(
         Command::new("cargo")
             .arg("run")
@@ -28,6 +28,7 @@ fn publisher_to_rosrust_subscriber() {
         .unwrap();
 
     let publisher = rosrust::publish::<msg::std_msgs::String>("chatter", 100).unwrap();
+    publisher.wait_for_subscribers(None).unwrap();
 
     let message = msg::std_msgs::String {
         data: "hello world".into(),

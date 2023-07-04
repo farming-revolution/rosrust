@@ -16,7 +16,7 @@ mod msg {
 }
 
 fn global_init() -> util::ChildProcessTerminator {
-    let roscore = util::run_roscore_for(util::Language::None, util::Feature::Benchmarks);
+    let roscore = util::run_roscore_for(util::TestVariant::Benchmark);
     rosrust::init("benchmarker");
     roscore
 }
@@ -52,6 +52,7 @@ fn subscribe_publish_relayed(criterion: &mut Criterion) {
         .unwrap();
 
     let publisher = rosrust::publish::<msg::std_msgs::String>(&pub_topic, 2000).unwrap();
+    publisher.wait_for_subscribers(None).unwrap();
 
     loop {
         publisher
@@ -132,6 +133,7 @@ fn subscribe_publish_directly(criterion: &mut Criterion) {
             tx.send(message.data).unwrap();
         })
         .unwrap();
+    publisher.wait_for_subscribers(None).unwrap();
 
     loop {
         publisher

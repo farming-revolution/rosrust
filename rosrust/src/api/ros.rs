@@ -7,17 +7,24 @@ use super::raii::{Publisher, Service, Subscriber};
 use super::resolve;
 use super::slave::Slave;
 use crate::api::clock::Delay;
+use crate::api::handlers::CallbackSubscriptionHandler;
+use crate::api::slave::ParamCache;
 use crate::api::ShutdownManager;
 use crate::msg::rosgraph_msgs::{Clock as ClockMsg, Log};
 use crate::msg::std_msgs::Header;
+use crate::rosxmlrpc::client::bad_response_structure;
 use crate::tcpros::{Client, Message, ServicePair, ServiceResult};
-use crate::{RawMessage, RawMessageDescription};
+use crate::util::FAILED_TO_LOCK;
+use crate::{RawMessage, RawMessageDescription, SubscriptionHandler};
 use error_chain::bail;
+use lazy_static::lazy_static;
 use log::error;
 use ros_message::{Duration, Time};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::Instant;
 use xml_rpc;
@@ -26,13 +33,14 @@ use yaml_rust::{Yaml, YamlLoader};
 pub struct Ros {
     master: Arc<Master>,
     slave: Arc<Slave>,
+    param_cache: ParamCache,
     hostname: String,
     bind_address: String,
     resolver: Resolver,
     name: String,
     clock: Arc<dyn Clock>,
     static_subs: Vec<Subscriber>,
-    logger: Option<Publisher<Log>>,
+    logger: Arc<Mutex<Option<Publisher<Log>>>>,
     shutdown_manager: Arc<ShutdownManager>,
 }
 
@@ -75,7 +83,7 @@ impl Ros {
             ros.clock = ros_clock;
         }
 
-        ros.logger = Some(ros.publish("/rosout", 100)?);
+        *ros.logger.lock().unwrap() = Some(ros.publish("/rosout", 100)?);
 
         Ok(ros)
     }
@@ -100,14 +108,20 @@ impl Ros {
         let name = format!("{}/{}", namespace, name);
         let resolver = Resolver::new(&name)?;
 
-        let shutdown_manager = Arc::new(ShutdownManager::default());
+        let logger = Arc::new(Mutex::new(None));
+        let shutdown_manager = Arc::new(ShutdownManager::new({
+            let logger = Arc::clone(&logger);
+            move || drop(logger.lock().unwrap().take())
+        }));
 
+        let param_cache = Arc::new(Mutex::new(Default::default()));
         let slave = Slave::new(
             master_uri,
             hostname,
             bind_host,
             0,
             &name,
+            Arc::clone(&param_cache),
             Arc::clone(&shutdown_manager),
             Default::default()
         )?;
@@ -116,13 +130,14 @@ impl Ros {
         Ok(Ros {
             master: Arc::new(master),
             slave: Arc::new(slave),
+            param_cache,
             hostname: String::from(hostname),
             bind_address: String::from(bind_host),
             resolver,
             name,
             clock: Arc::new(RealClock::default()),
             static_subs: Vec::new(),
-            logger: None,
+            logger,
             shutdown_manager,
         })
     }
@@ -187,6 +202,7 @@ impl Ros {
 
     pub fn param(&self, name: &str) -> Option<Parameter> {
         self.resolver.translate(name).ok().map(|v| Parameter {
+            param_cache: Arc::clone(&self.param_cache),
             master: Arc::clone(&self.master),
             name: v,
         })
@@ -298,13 +314,35 @@ impl Ros {
             queue_size = usize::max_value();
         }
         let name = self.resolver.translate(topic)?;
-        Subscriber::new::<T, F, G>(
+        Subscriber::new::<T, _>(
             Arc::clone(&self.master),
             Arc::clone(&self.slave),
             &name,
             queue_size,
-            on_message,
-            on_connect,
+            CallbackSubscriptionHandler::new(on_message, on_connect),
+        )
+    }
+
+    pub fn subscribe_with<T, H>(
+        &self,
+        topic: &str,
+        mut queue_size: usize,
+        handler: H,
+    ) -> Result<Subscriber>
+    where
+        T: Message,
+        H: SubscriptionHandler<T>,
+    {
+        if queue_size == 0 {
+            queue_size = usize::max_value();
+        }
+        let name = self.resolver.translate(topic)?;
+        Subscriber::new::<T, H>(
+            Arc::clone(&self.master),
+            Arc::clone(&self.slave),
+            &name,
+            queue_size,
+            handler,
         )
     }
 
@@ -378,10 +416,6 @@ impl Ros {
 
     pub fn log(&self, level: i8, msg: String, file: &str, line: u32) {
         self.log_to_terminal(level, &msg, file, line);
-        let logger = &match self.logger {
-            Some(ref v) => v,
-            None => return,
-        };
         let topics = self.slave.publications.get_topic_names();
         let message = Log {
             header: Header::default(),
@@ -393,13 +427,85 @@ impl Ros {
             function: String::default(),
             topics,
         };
-        if let Err(err) = logger.send(message) {
-            error!("Logging error: {}", err);
+        let maybe_logger = self.logger.lock().unwrap();
+        if let Some(logger) = maybe_logger.deref() {
+            if let Err(err) = logger.send(message) {
+                error!("Logging error: {}", err);
+            }
+        }
+    }
+
+    pub fn log_once(&self, level: i8, msg: String, file: &str, line: u32) {
+        lazy_static! {
+            static ref UNIQUE_LOGS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+        }
+        let key = format!("{}:{}", file, line);
+        let mut unique_logs = UNIQUE_LOGS.lock().expect(FAILED_TO_LOCK);
+        if !unique_logs.contains(&key) {
+            unique_logs.insert(key);
+            self.log(level, msg, file, line);
+        }
+    }
+
+    pub fn log_throttle(&self, period: f64, level: i8, msg: String, file: &str, line: u32) {
+        lazy_static! {
+            static ref PERIODIC_LOGS: Mutex<HashMap<String, Time>> = Mutex::new(HashMap::new());
+        }
+        let now = self.now();
+        let key = format!("{}:{}", file, line);
+        let get_next_log_time = |now, period| now + Duration::from_nanos((period * 1e9) as i64);
+        let mut period_logs = PERIODIC_LOGS.lock().expect(FAILED_TO_LOCK);
+        match period_logs.get_mut(&key) {
+            Some(next_log_time) => {
+                if now >= *next_log_time {
+                    *next_log_time = get_next_log_time(*next_log_time, period);
+                    self.log(level, msg, file, line);
+                }
+            }
+            None => {
+                period_logs.insert(key, get_next_log_time(now, period));
+                self.log(level, msg, file, line);
+            }
+        }
+    }
+
+    pub fn log_throttle_identical(
+        &self,
+        period: f64,
+        level: i8,
+        msg: String,
+        file: &str,
+        line: u32,
+    ) {
+        lazy_static! {
+            static ref IDENTICAL_LOGS: Mutex<HashMap<String, (Time, String)>> =
+                Mutex::new(HashMap::new());
+        }
+        let now = self.now();
+        let key = format!("{}:{}", file, line);
+        let get_next_log_time = |now, period| now + Duration::from_nanos((period * 1e9) as i64);
+        let mut identical_logs = IDENTICAL_LOGS.lock().expect(FAILED_TO_LOCK);
+        match identical_logs.get_mut(&key) {
+            Some((next_log_time, previous_msg)) => {
+                if &msg != previous_msg {
+                    *previous_msg = msg.clone();
+                    *next_log_time = get_next_log_time(now, period);
+                    self.log(level, msg, file, line);
+                } else if now >= *next_log_time {
+                    *next_log_time = get_next_log_time(*next_log_time, period);
+                    self.log(level, msg, file, line);
+                }
+            }
+            None => {
+                identical_logs.insert(key, (get_next_log_time(now, period), msg.clone()));
+                self.log(level, msg, file, line);
+            }
         }
     }
 }
 
 pub struct Parameter {
+    param_cache: ParamCache,
     master: Arc<Master>,
     name: String,
 }
@@ -410,11 +516,30 @@ impl Parameter {
     }
 
     pub fn get<'b, T: Deserialize<'b>>(&self) -> Response<T> {
-        self.master.get_param::<T>(&self.name)
+        let data = self.get_raw()?;
+        Deserialize::deserialize(data).map_err(bad_response_structure)
     }
 
     pub fn get_raw(&self) -> Response<xml_rpc::Value> {
-        self.master.get_param_any(&self.name)
+        let subscribed;
+        {
+            let cache = self.param_cache.lock().expect(FAILED_TO_LOCK);
+            if let Some(data) = cache.data.get(&self.name) {
+                return data.clone();
+            }
+            subscribed = cache.subscribed;
+        }
+        if !subscribed {
+            self.master.subscribe_param_any("/")?;
+            self.param_cache.lock().expect(FAILED_TO_LOCK).subscribed = true;
+        }
+        let data = self.master.get_param_any(&self.name);
+        self.param_cache
+            .lock()
+            .expect(FAILED_TO_LOCK)
+            .data
+            .insert(self.name.clone(), data.clone());
+        data
     }
 
     pub fn set<T: Serialize>(&self, value: &T) -> Response<()> {

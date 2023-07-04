@@ -5,7 +5,7 @@ use crate::error::{ErrorKind, Result};
 use crate::rosxmlrpc::Response;
 use crate::tcpros::{Client, Message, ServicePair, ServiceResult};
 use crate::util::FAILED_TO_LOCK;
-use crate::RawMessageDescription;
+use crate::{RawMessageDescription, SubscriptionHandler};
 use crossbeam::sync::ShardedLock;
 use ctrlc;
 use error_chain::bail;
@@ -200,6 +200,15 @@ where
 }
 
 #[inline]
+pub fn subscribe_with<T, H>(topic: &str, queue_size: usize, handler: H) -> Result<Subscriber>
+where
+    T: Message,
+    H: SubscriptionHandler<T>,
+{
+    ros!().subscribe_with::<T, H>(topic, queue_size, handler)
+}
+
+#[inline]
 pub fn publish<T>(topic: &str, queue_size: usize) -> Result<Publisher<T>>
 where
     T: Message,
@@ -229,5 +238,19 @@ pub fn subscribe_param<'a, T: Deserialize<'a>>(key : &str, callback: std::sync::
     Ok(())
 }
 
+#[inline]
+pub fn log_once(level: i8, msg: String, file: &str, line: u32) {
+    ros!().log_once(level, msg, file, line)
+}
+
+#[inline]
+pub fn log_throttle(period: f64, level: i8, msg: String, file: &str, line: u32) {
+    ros!().log_throttle(period, level, msg, file, line)
+}
+
+#[inline]
+pub fn log_throttle_identical(period: f64, level: i8, msg: String, file: &str, line: u32) {
+    ros!().log_throttle_identical(period, level, msg, file, line)
+}
 
 static UNINITIALIZED: &str = "ROS uninitialized. Please run ros::init(name) first!";
