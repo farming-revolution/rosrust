@@ -562,6 +562,10 @@ impl Parameter {
     pub fn search(&self) -> Response<String> {
         self.master.search_param(&self.name)
     }
+
+    pub fn remove_from_cache(&self) {
+        self.param_cache.lock().expect(FAILED_TO_LOCK).data.remove(&self.name);
+    }
 }
 
 fn yaml_to_xmlrpc(val: Yaml) -> Result<xml_rpc::Value> {
