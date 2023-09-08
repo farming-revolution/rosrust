@@ -185,6 +185,6 @@ impl Slave {
 
 impl Drop for Slave {
     fn drop(&mut self) {
-        self.shutdown_tx.send().unwrap();
+        let _ = self.shutdown_tx.send();
     }
 }
