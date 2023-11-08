@@ -6,6 +6,7 @@ use ros_message::{DataType, FieldCase, FieldInfo, MessagePath, MessageValue, Msg
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct DynamicMsg {
@@ -67,7 +68,7 @@ impl DynamicMsg {
         let message_path = message_type
             .try_into()
             .chain_err(|| format!("Message type {} is invalid", message_type))?;
-        Msg::new(message_path, message_src)
+        Msg::new(message_path, message_src, &PathBuf::from("DYNAMIC_MSG"))
             .chain_err(|| format!("Failed to parse message {}", message_type))
     }
 

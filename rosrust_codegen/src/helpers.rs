@@ -228,7 +228,7 @@ fn get_message_or_service(
             let mut contents = String::new();
             f.read_to_string(&mut contents)
                 .chain_err(|| "Failed to read file to string!")?;
-            return create_message(path, &contents, ignore_bad_messages).map(MessageCase::Message);
+            return create_message(path, &contents, ignore_bad_messages, full_path).map(MessageCase::Message);
         }
     }
     if let Some(full_path) = service_locations.get(&path) {
@@ -237,10 +237,10 @@ fn get_message_or_service(
             f.read_to_string(&mut contents)
                 .chain_err(|| "Failed to read file to string!")?;
 
-            let service = ros_message::Srv::new(path.clone(), &contents)
+            let service = ros_message::Srv::new(path.clone(), &contents, full_path)
                 .or_else(|err| {
                     if ignore_bad_messages {
-                        ros_message::Srv::new(path.clone(), "\n\n---\n\n")
+                        ros_message::Srv::new(path.clone(), "\n\n---\n\n", &PathBuf::from("IGNORE_BAD_MESSAGES"))
                     } else {
                         Err(err)
                     }
@@ -258,10 +258,10 @@ fn get_message_or_service(
         }
     }
     if let Some(contents) = IN_MEMORY_MESSAGES.get(&path) {
-        return Msg::new(path, contents).map(MessageCase::Message);
+        return Msg::new(path, contents, &PathBuf::from("IN_MEMORY")).map(MessageCase::Message);
     }
     if ignore_bad_messages {
-        return Msg::new(path, "").map(MessageCase::Message);
+        return Msg::new(path, "", &PathBuf::from("IGNORE_BAD_MESSAGES")).map(MessageCase::Message);
     }
     bail!(ErrorKind::MessageNotFound(
         path.to_string(),
@@ -269,10 +269,10 @@ fn get_message_or_service(
     ))
 }
 
-fn create_message(message: MessagePath, contents: &str, ignore_bad_messages: bool) -> Result<Msg> {
-    Msg::new(message.clone(), contents).or_else(|err| {
+fn create_message(message: MessagePath, contents: &str, ignore_bad_messages: bool, file_path : &PathBuf) -> Result<Msg> {
+    Msg::new(message.clone(), contents, file_path).or_else(|err| {
         if ignore_bad_messages {
-            Msg::new(message, "")
+            Msg::new(message, "", file_path)
         } else {
             Err(err)
         }

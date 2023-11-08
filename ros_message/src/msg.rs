@@ -4,15 +4,17 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Formatter;
+use std::path::PathBuf;
 
 /// A ROS message parsed from a `msg` file.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(into = "MsgSerde")]
-#[serde(try_from = "MsgSerde")]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)] //, Serialize, Deserialize
+// #[serde(into = "MsgSerde")]
+// #[serde(try_from = "MsgSerde")]
 pub struct Msg {
     path: MessagePath,
     fields: Vec<FieldInfo>,
     source: String,
+    file_path : PathBuf,
 }
 
 impl fmt::Display for Msg {
@@ -52,13 +54,15 @@ impl Msg {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(path: MessagePath, source: &str) -> Result<Msg> {
+    pub fn new(path: MessagePath, source: &str, file_path : &PathBuf) -> Result<Msg> {
         let source = source.trim().to_owned();
         let fields = match_lines(&source)?;
+        let file_path = file_path.clone();
         Ok(Msg {
             path,
             fields,
             source,
+            file_path
         })
     }
 
@@ -262,27 +266,31 @@ impl Msg {
     pub fn has_header(&self) -> bool {
         self.fields.iter().any(FieldInfo::is_header)
     }
-}
 
-#[derive(Serialize, Deserialize)]
-struct MsgSerde {
-    path: MessagePath,
-    source: String,
-}
-
-impl TryFrom<MsgSerde> for Msg {
-    type Error = Error;
-
-    fn try_from(src: MsgSerde) -> Result<Self> {
-        Self::new(src.path, &src.source)
+    pub fn get_file_path(&self) -> &PathBuf {
+        &self.file_path
     }
 }
 
-impl From<Msg> for MsgSerde {
-    fn from(src: Msg) -> Self {
-        Self {
-            path: src.path,
-            source: src.source,
-        }
-    }
-}
+// #[derive(Serialize, Deserialize)]
+// struct MsgSerde {
+//     path: MessagePath,
+//     source: String,
+// }
+
+// impl TryFrom<MsgSerde> for Msg {
+//     type Error = Error;
+
+//     fn try_from(src: MsgSerde) -> Result<Self> {
+//         Self::new(src.path, &src.source)
+//     }
+// }
+
+// impl From<Msg> for MsgSerde {
+//     fn from(src: Msg) -> Self {
+//         Self {
+//             path: src.path,
+//             source: src.source,
+//         }
+//     }
+// }

@@ -5,11 +5,12 @@ use serde_derive::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Formatter;
+use std::path::PathBuf;
 
 /// A ROS service parsed from a `srv` file.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(into = "SrvSerde")]
-#[serde(try_from = "SrvSerde")]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)] // Serialize, Deserialize
+// #[serde(into = "SrvSerde")]
+// #[serde(try_from = "SrvSerde")]
 pub struct Srv {
     path: MessagePath,
     source: String,
@@ -59,9 +60,9 @@ impl Srv {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(path: MessagePath, source: impl Into<String>) -> Result<Srv> {
+    pub fn new(path: MessagePath, source: impl Into<String>, file_path : &PathBuf) -> Result<Srv> {
         let source = source.into();
-        let (req, res) = Self::build_req_res(&path, &source)?;
+        let (req, res) = Self::build_req_res(&path, &source, file_path)?;
         Ok(Srv {
             path,
             source,
@@ -90,7 +91,7 @@ impl Srv {
         &self.res
     }
 
-    fn build_req_res(path: &MessagePath, source: &str) -> Result<(Msg, Msg)> {
+    fn build_req_res(path: &MessagePath, source: &str, file_path : &PathBuf) -> Result<(Msg, Msg)> {
         lazy_static! {
             static ref RE_SPLIT: regex::Regex = RegexBuilder::new("^---$")
                 .multi_line(true)
@@ -116,31 +117,31 @@ impl Srv {
         };
 
         Ok((
-            Msg::new(path.peer(format!("{}Req", path.name())), req)?,
-            Msg::new(path.peer(format!("{}Res", path.name())), res)?,
+            Msg::new(path.peer(format!("{}Req", path.name())), req, file_path)?,
+            Msg::new(path.peer(format!("{}Res", path.name())), res, file_path)?,
         ))
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct SrvSerde {
-    path: MessagePath,
-    source: String,
-}
+// #[derive(Serialize, Deserialize)]
+// struct SrvSerde {
+//     path: MessagePath,
+//     source: String,
+// }
 
-impl TryFrom<SrvSerde> for Srv {
-    type Error = Error;
+// impl TryFrom<SrvSerde> for Srv {
+//     type Error = Error;
 
-    fn try_from(src: SrvSerde) -> Result<Self> {
-        Self::new(src.path, &src.source)
-    }
-}
+//     fn try_from(src: SrvSerde) -> Result<Self> {
+//         Self::new(src.path, &src.source)
+//     }
+// }
 
-impl From<Srv> for SrvSerde {
-    fn from(src: Srv) -> Self {
-        Self {
-            path: src.path,
-            source: src.source,
-        }
-    }
-}
+// impl From<Srv> for SrvSerde {
+//     fn from(src: Srv) -> Self {
+//         Self {
+//             path: src.path,
+//             source: src.source,
+//         }
+//     }
+// }
