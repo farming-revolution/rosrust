@@ -1,16 +1,12 @@
 use crate::{Error, MessagePath, Msg, Result};
 use lazy_static::lazy_static;
 use regex::RegexBuilder;
-use serde_derive::{Deserialize, Serialize};
-use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Formatter;
 use std::path::PathBuf;
 
 /// A ROS service parsed from a `srv` file.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)] // Serialize, Deserialize
-// #[serde(into = "SrvSerde")]
-// #[serde(try_from = "SrvSerde")]
 pub struct Srv {
     path: MessagePath,
     source: String,
@@ -122,26 +118,3 @@ impl Srv {
         ))
     }
 }
-
-// #[derive(Serialize, Deserialize)]
-// struct SrvSerde {
-//     path: MessagePath,
-//     source: String,
-// }
-
-// impl TryFrom<SrvSerde> for Srv {
-//     type Error = Error;
-
-//     fn try_from(src: SrvSerde) -> Result<Self> {
-//         Self::new(src.path, &src.source)
-//     }
-// }
-
-// impl From<Srv> for SrvSerde {
-//     fn from(src: Srv) -> Self {
-//         Self {
-//             path: src.path,
-//             source: src.source,
-//         }
-//     }
-// }

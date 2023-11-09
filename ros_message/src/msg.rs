@@ -1,15 +1,11 @@
-use crate::{parse_msg::match_lines, DataType, Error, FieldInfo, MessagePath, Result, Value};
-use serde_derive::{Deserialize, Serialize};
+use crate::{parse_msg::match_lines, DataType, FieldInfo, MessagePath, Result, Value};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Formatter;
 use std::path::PathBuf;
 
 /// A ROS message parsed from a `msg` file.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)] //, Serialize, Deserialize
-// #[serde(into = "MsgSerde")]
-// #[serde(try_from = "MsgSerde")]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Msg {
     path: MessagePath,
     fields: Vec<FieldInfo>,
@@ -267,30 +263,8 @@ impl Msg {
         self.fields.iter().any(FieldInfo::is_header)
     }
 
+    /// equivalent to Message::msg_definition(), but works with include_str! to trigger a rebuild on change.
     pub fn get_file_path(&self) -> &PathBuf {
         &self.file_path
     }
 }
-
-// #[derive(Serialize, Deserialize)]
-// struct MsgSerde {
-//     path: MessagePath,
-//     source: String,
-// }
-
-// impl TryFrom<MsgSerde> for Msg {
-//     type Error = Error;
-
-//     fn try_from(src: MsgSerde) -> Result<Self> {
-//         Self::new(src.path, &src.source)
-//     }
-// }
-
-// impl From<Msg> for MsgSerde {
-//     fn from(src: Msg) -> Self {
-//         Self {
-//             path: src.path,
-//             source: src.source,
-//         }
-//     }
-// }

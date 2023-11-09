@@ -240,7 +240,7 @@ fn get_message_or_service(
             let service = ros_message::Srv::new(path.clone(), &contents, full_path)
                 .or_else(|err| {
                     if ignore_bad_messages {
-                        ros_message::Srv::new(path.clone(), "\n\n---\n\n", &PathBuf::from("IGNORE_BAD_MESSAGES"))
+                        ros_message::Srv::new(path.clone(), "\n\n---\n\n", full_path)
                     } else {
                         Err(err)
                     }
@@ -261,7 +261,8 @@ fn get_message_or_service(
         return Msg::new(path, contents, &PathBuf::from("IN_MEMORY")).map(MessageCase::Message);
     }
     if ignore_bad_messages {
-        return Msg::new(path, "", &PathBuf::from("IGNORE_BAD_MESSAGES")).map(MessageCase::Message);
+        let e = format!("IGNORE_BAD_MESSAGES {} {}", &path.package(), &path.name());
+        return Msg::new(path, "", &PathBuf::from(e)).map(MessageCase::Message);
     }
     bail!(ErrorKind::MessageNotFound(
         path.to_string(),

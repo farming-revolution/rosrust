@@ -76,7 +76,17 @@ impl Msg {
         let call = Ident::new("include_str", Span::call_site());
         let excl = Punct::new('!', Spacing::Alone);
         let inside = Literal::string(self.0.get_file_path().canonicalize().unwrap().to_str().unwrap());
-
+        
+        let fn_definition = if self.0.get_file_path().exists() {
+            quote!{
+                #call #excl (#inside)
+            }
+        } else {
+            quote!{
+                self.get_definition()
+            }
+        };
+        
         quote! {
             #[allow(dead_code, non_camel_case_types, non_snake_case)]
             #[derive(Clone)]
@@ -90,9 +100,7 @@ impl Msg {
 
             impl #name {
                 fn definition() -> &'static str {
-                    #call #excl (#inside)
-                    //return "hi"
-                    //include_str!(#(Literal::string(self.file_path)))
+                    #fn_definition
                 }
             }
 
