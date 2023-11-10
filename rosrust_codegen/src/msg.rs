@@ -1,9 +1,9 @@
 use crate::error::{Result, ResultExt};
 use lazy_static::lazy_static;
-use proc_macro2::{Literal, Span};
+use proc_macro2::{Literal, Span, Punct, Spacing};
 use quote::{quote, ToTokens};
 use ros_message::{DataType, FieldCase, FieldInfo, MessagePath};
-use std::collections::{BTreeSet, HashMap};
+use std::{collections::{BTreeSet, HashMap}, path::PathBuf};
 use syn::Ident;
 
 #[derive(Clone, Debug)]
@@ -16,8 +16,8 @@ pub struct Srv {
 }
 
 impl Msg {
-    pub fn new(path: MessagePath, source: &str) -> Result<Msg> {
-        ros_message::Msg::new(path, source)
+    pub fn new(path: MessagePath, source: &str, file_path : &PathBuf) -> Result<Msg> {
+        ros_message::Msg::new(path, source, &file_path)
             .map(Self)
             .chain_err(|| "Failed to parse message")
     }
@@ -72,6 +72,21 @@ impl Msg {
             .iter()
             .map(|v| field_info_const_token_stream(v, crate_prefix))
             .collect::<Vec<_>>();
+        
+        let call = Ident::new("include_str", Span::call_site());
+        let excl = Punct::new('!', Spacing::Alone);
+        let inside = Literal::string(self.0.get_file_path().canonicalize().unwrap().to_str().unwrap());
+        
+        let fn_definition = if self.0.get_file_path().exists() {
+            quote!{
+                #call #excl (#inside)
+            }
+        } else {
+            quote!{
+                self.get_definition()
+            }
+        };
+        
         quote! {
             #[allow(dead_code, non_camel_case_types, non_snake_case)]
             #[derive(Clone)]
@@ -81,6 +96,12 @@ impl Msg {
 
             impl #name {
                 #(#const_fields)*
+            }
+
+            impl #name {
+                fn definition() -> &'static str {
+                    #fn_definition
+                }
             }
 
             impl std::convert::From<#name> for #crate_prefix MsgValue {
