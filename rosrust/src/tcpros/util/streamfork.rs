@@ -1,18 +1,20 @@
 use crate::util::lossy_channel::{lossy_channel, LossyReceiver, LossySender};
 use crate::util::FAILED_TO_LOCK;
 use crossbeam::channel::{self, unbounded, Receiver, Sender};
+use std::any::Any;
 use std::io::Write;
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-pub fn fork<T: Write + Send + 'static>(queue_size: usize) -> (TargetList<T>, DataStream) {
+pub fn fork<T: Write + Send + 'static>(queue_size: usize, topic : &str) -> (TargetList<T>, DataStream) {
     let (streams_sender, streams) = unbounded();
     let (data_sender, data) = lossy_channel(queue_size);
 
     let mut fork_thread = ForkThread::new();
     let target_names = Arc::clone(&fork_thread.target_names);
 
-    thread::spawn(move || fork_thread.run(&streams, &data));
+    thread::Builder::new().name(format!("F{}", topic)).spawn(move || fork_thread.run(&streams, &data)).expect("failed to spawn thread");
 
     (
         TargetList(streams_sender),
@@ -41,8 +43,14 @@ impl<T: Write + Send + 'static> ForkThread<T> {
     fn publish_buffer_and_prune_targets(&mut self, buffer: &[u8]) {
         let mut dropped_targets = vec![];
         for (idx, target) in self.targets.iter_mut().enumerate() {
-            if target.stream.write_all(buffer).is_err() {
+            
+            if let Err(e) = target.stream.write_all(buffer) {
                 dropped_targets.push(idx);
+                dbg!((e, &target.caller_id));
+                let s = &target.stream as &dyn Any;
+                if let Some(s) = s.downcast_ref::<TcpStream>() {
+                    dbg!(s.peer_addr());
+                }
             }
         }
 

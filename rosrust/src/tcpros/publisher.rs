@@ -156,7 +156,7 @@ impl Publisher {
         let publisher_exists = Arc::new(atomic::AtomicBool::new(true));
 
         let port = socket_address.port();
-        let (targets, data) = fork(queue_size);
+        let (targets, data) = fork(queue_size, topic);
         let last_message = Arc::new(Mutex::new(Arc::new(Vec::new())));
 
         let latching = Arc::new(AtomicBool::new(false));
