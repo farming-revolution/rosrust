@@ -25,14 +25,11 @@ where
     for stream in connections.incoming() {
         match stream {
             Ok(stream) => {
-                // let timeout = std::time::Duration::from_secs(1);
-                // stream.set_write_timeout(Some(timeout)).unwrap();
-                // stream.set_read_timeout(Some(timeout)).unwrap();
                 let debug_msg = format!(
-                    "t: {} | tag: {} | peer: {:?} | read to: {:?} | write to: {:?}",
+                    "new connection: t = {} | tag = {} | peer: {:?} | read timeout: {:?} | write timeout: {:?}",
                     crate::now(), &tag, stream.peer_addr(), stream.read_timeout(), stream.write_timeout()
                 ).replace('\n', "");
-                println!("{}", debug_msg);
+                log::info!("{}", debug_msg);
                 match handler(stream) {
                     Feedback::AcceptNextStream => {}
                     Feedback::StopAccepting => break,

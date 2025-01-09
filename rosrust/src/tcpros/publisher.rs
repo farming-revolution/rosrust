@@ -170,13 +170,11 @@ impl Publisher {
             let latching = latching.clone();
 
             move |stream: TcpStream| {
-                // if topic == "/rosout" {
-                //     return tcpconnection::Feedback::AcceptNextStream;
-                // }
+
                 if !publisher_exists.load(atomic::Ordering::SeqCst) {
                     return tcpconnection::Feedback::StopAccepting;
                 }
-                dbg!("calling process_subscriber");
+
                 process_subscriber(
                     &topic,
                     stream,
