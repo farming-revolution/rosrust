@@ -57,6 +57,7 @@ impl<T> LossySender<T> {
         *self.queue_size.lock().expect(FAILED_TO_LOCK) = queue_size;
     }
 
+    /// set the queue size to at least (!) `queue_size` (keep current setting if it's larger than `queue_size`)
     pub fn set_queue_size_max(&self, queue_size: usize) {
         let mut current_size = self.queue_size.lock().expect(FAILED_TO_LOCK);
         *current_size = current_size.max(queue_size);
