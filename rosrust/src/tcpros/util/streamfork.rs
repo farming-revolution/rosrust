@@ -1,7 +1,7 @@
 use crate::util::lossy_channel::{lossy_channel, LossyReceiver, LossySender};
 use crate::util::FAILED_TO_LOCK;
 use crossbeam::channel::{
-    self, unbounded, Receiver, RecvError, Sender, TryRecvError, TrySendError,
+    self, unbounded, bounded, Receiver, RecvError, Sender, TryRecvError, TrySendError,
 };
 use crossbeam::select;
 use std::any::Any;
@@ -16,7 +16,7 @@ pub fn fork<T: Write + Send + 'static>(
     topic: &str,
 ) -> (TargetList<T>, Arc<DataStream>) {
     let (tx_streams, rx_streams) = unbounded::<SubscriberInfo<T>>();
-    let (tx_data, rx_data) = unbounded::<Arc<Vec<u8>>>();
+    let (tx_data, rx_data) = bounded::<Arc<Vec<u8>>>(0);
     let (tx_queue_size, rx_queue_size) = unbounded::<SetQueueSize>();
 
     let target_names = Arc::new(Mutex::new(TargetNames::default()));
