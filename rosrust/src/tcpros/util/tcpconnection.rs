@@ -25,6 +25,7 @@ where
     for stream in connections.incoming() {
         match stream {
             Ok(stream) => {
+                let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(100)));
                 let debug_msg = format!(
                     "new connection: t = {} | tag = {} | peer: {:?} | read timeout: {:?} | write timeout: {:?}",
                     crate::now(), &tag, stream.peer_addr(), stream.read_timeout(), stream.write_timeout()
