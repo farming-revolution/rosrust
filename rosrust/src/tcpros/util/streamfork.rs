@@ -1,8 +1,6 @@
 use crate::util::lossy_channel::{lossy_channel, LossyReceiver, LossySender};
 use crate::util::FAILED_TO_LOCK;
-use crossbeam::channel::{
-    self, bounded, Receiver, RecvError, Sender, TryRecvError, TrySendError,
-};
+use crossbeam::channel::{self, bounded, Receiver, RecvError, Sender, TryRecvError, TrySendError};
 use crossbeam::select;
 use std::any::Any;
 use std::io::Write;
@@ -16,7 +14,6 @@ pub fn fork<T: Write + Send + 'static>(
     queue_size: usize,
     topic: &str,
 ) -> (TargetList<T>, Arc<DataStream>) {
-
     // Zero-sized bounded channels are a special case in crossbeam, because
     // - they don't do busy waiting,
     // - send/recv operations block until the other is also called.
@@ -34,8 +31,12 @@ pub fn fork<T: Write + Send + 'static>(
     let (tx_subscriber_gone, rx_subscriber_gone) = bounded::<u64>(0);
 
     let target_names = Arc::new(Mutex::new(TargetNames::default()));
-    
-    eprintln!("fork ({}): {:?}", &topic, thread_priority::get_current_thread_priority()); 
+
+    log::debug!(
+        "fork ({}): {:?}",
+        &topic,
+        thread_priority::get_current_thread_priority()
+    );
 
     let join_handle = Some(thread::Builder::new()
         .name(format!("F{}", &topic))
@@ -43,7 +44,7 @@ pub fn fork<T: Write + Send + 'static>(
             let target_names = Arc::clone(&target_names);
             let topic = topic.to_owned();
             move || {
-                eprintln!("thread that listens for new connections ({}): {:?}", &topic, thread_priority::get_current_thread_priority()); 
+                log::debug!("thread that listens for new connections ({}): {:?}", &topic, thread_priority::get_current_thread_priority()); 
                 let mut senders = Vec::new();
                 let mut queue_size = queue_size;
                 let mut subscriber_id = 0u64;
@@ -79,20 +80,20 @@ pub fn fork<T: Write + Send + 'static>(
                                     let mut target_names = target_names.lock().unwrap();
                                     if let Some(idx) = senders.iter().position(|s| s.id == subscriber_id) {
                                         senders[idx].is_live.store(false, std::sync::atomic::Ordering::SeqCst);
-                                        eprintln!("=> senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
+                                        log::debug!("=> senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
                                         senders.remove(idx);
-                                        eprintln!("<= senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
+                                        log::debug!("<= senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
                                         target_names.targets.remove(idx);
                                     }
                                 },
                                 Err(e) => {
-                                    eprintln!("error on rx_subscriber_gone: {:?}", e);
+                                    log::debug!("error on rx_subscriber_gone: {:?}", e);
                                 }
                             }
                         },
                         recv(rx_data) -> data => {
                             let Ok(data) = data else {
-                                eprintln!("DataStream rx_data got error, ending");
+                                log::debug!("DataStream rx_data got error, ending");
                                 break;
                             };
                             let mut disconnected_clients = Vec::<usize>::new();
@@ -115,9 +116,9 @@ pub fn fork<T: Write + Send + 'static>(
                                     senders[idx].is_live.store(false, std::sync::atomic::Ordering::SeqCst);
                                     target_names.targets.remove(idx);
                                     let subsriber_id = senders[idx].id;
-                                    eprintln!("=> senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
+                                    log::debug!("=> senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
                                     senders.remove(idx);
-                                    eprintln!("<= senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
+                                    log::debug!("<= senders.remove(idx = {}, subscriber_id = {})", idx, subscriber_id);
                                 }
                             }
                         },
@@ -143,9 +144,9 @@ pub fn fork<T: Write + Send + 'static>(
                 // We're not going to poll this anymore, so don't block the SenderSingleSubscriber
                 // instances trying to report their own exit here
                 drop(rx_subscriber_gone);
-                eprintln!("DataStream thread ending, dropping senders... ({}→ {:?})", &topic, target_names.lock().unwrap().names());
+                log::debug!("DataStream thread ending, dropping senders... ({}→ {:?})", &topic, target_names.lock().unwrap().names());
                 drop(senders);
-                eprintln!("...senders dropped ({})", &topic);
+                log::debug!("...senders dropped ({})", &topic);
             }
         })
         .expect("failed to spawn thread"));
@@ -157,10 +158,10 @@ pub fn fork<T: Write + Send + 'static>(
             join_handle,
             tx_data: Some(tx_data),
             tx_queue_size,
+            topic_name: topic.to_owned(),
         }),
     )
 }
-
 
 pub type ForkResult = Result<(), ()>;
 
@@ -176,17 +177,24 @@ impl<T: Write + Send + 'static> TargetList<T> {
 
 /// Wrapper around TcpStream (or similar `T: Write + Send + 'static`) with a `LossyChannel` inbetween
 struct SenderSingleSubscriber<T: Write + Send + 'static> {
-    id : u64,
+    id: u64,
     tx: LossySender<Arc<Vec<u8>>>,
     join_handle: Option<JoinHandle<()>>,
     name: String,
-    tx_subscriber_gone : Sender<u64>,
-    is_live : Arc<AtomicBool>,
+    tx_subscriber_gone: Sender<u64>,
+    // If we're still live on drop, notify the DataStream instance.
+    is_live: Arc<AtomicBool>,
     _transport_type: PhantomData<T>,
 }
 
 impl<T: Write + Send + 'static> SenderSingleSubscriber<T> {
-    fn new(id : u64, transport: T, name: String, queue_size: usize, tx_subscriber_gone : Sender<u64>) -> Self {
+    fn new(
+        id: u64,
+        transport: T,
+        name: String,
+        queue_size: usize,
+        tx_subscriber_gone: Sender<u64>,
+    ) -> Self {
         let (tx, rx) = lossy_channel::<Arc<Vec<u8>>>(queue_size);
         let is_live = Arc::new(AtomicBool::new(true));
         let join_handle = Some(std::thread::spawn({
@@ -194,41 +202,41 @@ impl<T: Write + Send + 'static> SenderSingleSubscriber<T> {
             let tx_subscriber_gone = tx_subscriber_gone.clone();
             let is_live = Arc::clone(&is_live);
             move || {
-                eprintln!("SenderSingleSubscriber, thread that writes to transport ({}): {:?}", &name, thread_priority::get_current_thread_priority()); 
+                log::debug!(
+                    "SenderSingleSubscriber, thread that writes to transport ({}): {:?}",
+                    &name,
+                    thread_priority::get_current_thread_priority()
+                );
                 let mut rx = rx;
                 let mut transport = transport;
                 let mut remainder = Option::<(usize, Arc<Vec<u8>>)>::None;
                 loop {
                     if rx.kill_rx.try_recv().is_ok() {
-                        eprintln!("got killrx, quitting ({})", &name);
+                        log::debug!("got killrx, quitting ({})", &name);
                         break;
                     }
                     if let Some((ref mut idx, ref buf)) = remainder {
                         let num_bytes_total = buf.len();
                         match transport.write(&buf[*idx..]) {
-                            Ok(num_bytes_written) if num_bytes_total == *idx + num_bytes_written => {
+                            Ok(num_bytes_written)
+                                if num_bytes_total == *idx + num_bytes_written =>
+                            {
                                 remainder = None;
-                            },
+                            }
                             Ok(num_bytes_written) => {
                                 *idx += num_bytes_total;
                                 continue;
                             }
-                            Err(e) => {
-                                match e.kind() {
-                                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => {
-                                        continue;
-                                    },
-                                    other_error => {
-                                        eprintln!("closing channel {:?} ({})", other_error, &name);
-                                        break;
-                                    }
+                            Err(e) => match e.kind() {
+                                std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => {
+                                    continue;
                                 }
-                            }
+                                other_error => {
+                                    log::debug!("closing channel {:?} ({})", other_error, &name);
+                                    break;
+                                }
+                            },
                         }
-                        // if let Err(e) = transport.write_all(serialized_msg.as_slice()) {
-                        //     log::error!("error writing to transport to {}: {:?}", &name, e);
-                        //     return;
-                        // }
                     }
                     match rx.next() {
                         Some(serialized_msg) => {
@@ -236,15 +244,20 @@ impl<T: Write + Send + 'static> SenderSingleSubscriber<T> {
                         }
                         None => {
                             // channel closed
-                            eprintln!("SingleSenderSubscriber, got None in rx.next()");
+                            log::debug!("SingleSenderSubscriber, got None in rx.next()");
                             break;
                         }
                     }
                 }
                 if is_live.load(std::sync::atomic::Ordering::SeqCst) {
-                    eprintln!("=> {} tx_subscriber_gone.send({})", &name, id);
-                    dbg!(tx_subscriber_gone.send(id), &name);
-                    eprintln!("<= {} tx_subscriber_gone.send({})", &name, id);
+                    log::debug!("=> {} tx_subscriber_gone.send({})", &name, id);
+                    log::debug!(
+                        "tx_subscriber_gone.send(id={}) returned {:?} (name={})",
+                        id,
+                        tx_subscriber_gone.send(id),
+                        &name
+                    );
+                    log::debug!("<= {} tx_subscriber_gone.send({})", &name, id);
                 }
             }
         }));
@@ -278,9 +291,15 @@ impl<T: Write + Send + 'static> SenderSingleSubscriber<T> {
 impl<T: Write + Send + 'static> Drop for SenderSingleSubscriber<T> {
     fn drop(&mut self) {
         let _ = self.tx.close();
-        eprintln!("closing SenderSingleSubscriber (→ {}), waiting for thread", &self.name);
+        log::debug!(
+            "closing SenderSingleSubscriber (→ {}), waiting for thread",
+            &self.name
+        );
         self.join_handle.take().unwrap().join().unwrap();
-        eprintln!("  ==> done closing SingleSenderSubscriber (→ {})", &self.name);
+        log::debug!(
+            "  ==> done closing SingleSenderSubscriber (→ {})",
+            &self.name
+        );
         if self.is_live.load(std::sync::atomic::Ordering::SeqCst) {
             let _ = self.tx_subscriber_gone.send(self.id);
         }
@@ -294,7 +313,12 @@ struct SubscriberInfo<T> {
 
 impl<T> std::fmt::Debug for SubscriberInfo<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SubscriberInfo<{}> {{caller_id: \"{}\"}}", std::any::type_name::<T>(), &self.caller_id)
+        write!(
+            f,
+            "SubscriberInfo<{}> {{caller_id: \"{}\"}}",
+            std::any::type_name::<T>(),
+            &self.caller_id
+        )
     }
 }
 
@@ -311,12 +335,13 @@ pub struct DataStream {
     // closing the channel, which in turn signals to our worker thread that it should terminate.
     tx_data: Option<Sender<Arc<Vec<u8>>>>,
     tx_queue_size: Sender<SetQueueSize>,
+    topic_name: String,
 }
 
 impl DataStream {
     pub fn send(&self, data: Arc<Vec<u8>>) -> ForkResult {
         if let Err(e) = self.tx_data.as_ref().unwrap().send(data) {
-            log::error!("error sending data: {:?}", e); // TODO: add topic name
+            log::error!("error sending data on topic {}: {:?}", &self.topic_name, e);
         };
         Ok(())
     }
@@ -357,9 +382,9 @@ impl Drop for DataStream {
     fn drop(&mut self) {
         drop(std::mem::take(&mut self.tx_data));
         let names = self.target_names.lock().unwrap().names().clone();
-        eprintln!("dropping Datastream (→{:?}), waiting for thread...", &names);
+        log::debug!("dropping Datastream (→{:?}), waiting for thread...", &names);
         self.join_handle.take().unwrap().join().unwrap();
-        eprintln!("  done waiting for DataStream thread (→{:?})", names);
+        log::debug!("  done waiting for DataStream thread (→{:?})", names);
     }
 }
 
