@@ -14,7 +14,7 @@ use std::sync::{atomic, Arc, Mutex};
 use std::os::fd::AsRawFd;
 
 pub struct Publisher {
-    subscriptions: DataStream,
+    subscriptions: Arc<DataStream>,
     pub port: u16,
     pub topic: Topic,
     last_message: Arc<Mutex<Arc<Vec<u8>>>>,
@@ -156,7 +156,7 @@ impl Publisher {
         let publisher_exists = Arc::new(atomic::AtomicBool::new(true));
 
         let port = socket_address.port();
-        let (targets, data) = fork(queue_size);
+        let (targets, data_stream) = fork(queue_size, topic);
         let last_message = Arc::new(Mutex::new(Arc::new(Vec::new())));
 
         let latching = Arc::new(AtomicBool::new(false));
@@ -170,9 +170,11 @@ impl Publisher {
             let latching = latching.clone();
 
             move |stream: TcpStream| {
+
                 if !publisher_exists.load(atomic::Ordering::SeqCst) {
                     return tcpconnection::Feedback::StopAccepting;
                 }
+
                 process_subscriber(
                     &topic,
                     stream,
@@ -194,7 +196,7 @@ impl Publisher {
         };
 
         Ok(Publisher {
-            subscriptions: data,
+            subscriptions: data_stream,
             port,
             topic,
             last_message,
@@ -227,7 +229,7 @@ impl Publisher {
 
 #[derive(Clone)]
 pub struct PublisherStream<T: Message> {
-    stream: DataStream,
+    stream: Arc<DataStream>,
     last_message: Arc<Mutex<Arc<Vec<u8>>>>,
     datatype: std::marker::PhantomData<T>,
     latching: Arc<AtomicBool>,

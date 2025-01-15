@@ -12,7 +12,10 @@ pub fn iterate<F>(listener: TcpListener, tag: String, handler: F) -> thread::Joi
 where
     F: Fn(TcpStream) -> Feedback + Send + 'static,
 {
-    thread::spawn(move || listener_thread(&listener, &tag, handler))
+    let handle = thread::Builder::new()
+        .name(format!("L{}", &tag))
+        .spawn(move || listener_thread(&listener, &tag, handler));
+    handle.expect("failed to spawn thread")
 }
 
 fn listener_thread<F>(connections: &TcpListener, tag: &str, handler: F)
@@ -21,10 +24,18 @@ where
 {
     for stream in connections.incoming() {
         match stream {
-            Ok(stream) => match handler(stream) {
-                Feedback::AcceptNextStream => {}
-                Feedback::StopAccepting => break,
-            },
+            Ok(stream) => {
+                let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(100)));
+                let debug_msg = format!(
+                    "new connection: t = {} | tag = {} | peer: {:?} | read timeout: {:?} | write timeout: {:?}",
+                    crate::now(), &tag, stream.peer_addr(), stream.read_timeout(), stream.write_timeout()
+                ).replace('\n', "");
+                log::info!("{}", debug_msg);
+                match handler(stream) {
+                    Feedback::AcceptNextStream => {}
+                    Feedback::StopAccepting => break,
+                }
+            }
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::InvalidInput {
                     // Got EINVAL, quitting listener thread. This happens after
