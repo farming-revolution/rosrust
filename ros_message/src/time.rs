@@ -13,8 +13,10 @@ const BILLION: i64 = 1_000_000_000;
 #[derive(Copy, Clone, Default, Serialize, Deserialize, Debug, Eq)]
 pub struct Time {
     /// Number of seconds.
+    #[serde(alias = "secs", default)]
     pub sec: u32,
     /// Number of nanoseconds inside the current second.
+    #[serde(alias = "nsecs", default)]
     pub nsec: u32,
 }
 

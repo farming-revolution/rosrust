@@ -87,8 +87,16 @@ impl Msg {
             }
         };
         
+
+        let serde_derives = if cfg!(feature = "derive-serde") {
+            quote! { #[derive(::serde::Serialize, ::serde::Deserialize)] }
+        } else {
+            quote! {}
+        };
+
         quote! {
             #[allow(dead_code, non_camel_case_types, non_snake_case)]
+            #serde_derives
             #[derive(Clone)]
             pub struct #name {
                 #(#fields)*

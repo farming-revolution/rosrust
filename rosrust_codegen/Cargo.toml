@@ -8,6 +8,11 @@ readme = "README.md"
 repository = "https://github.com/adnanademovic/rosrust"
 version = "0.9.6"
 
+
+[features]
+derive-serde = ["serde"]
+
+
 [dependencies]
 error-chain = "0.12.4"
 lazy_static = "1.4.0"
@@ -20,6 +25,10 @@ hex = "0.4.3"
 [dependencies.ros_message]
 path = "../ros_message"
 version = "0.1.0"
+
+[dependencies.serde]
+version = "1"
+optional = true
 
 [lib]
 proc-macro = true
