@@ -10,7 +10,7 @@ version = "0.9.6"
 
 
 [features]
-derive-serde = ["serde"]
+derive-serde = ["serde", "serde/derive"]
 
 
 [dependencies]

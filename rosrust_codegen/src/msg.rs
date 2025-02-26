@@ -89,9 +89,16 @@ impl Msg {
         
 
         let serde_derives = if cfg!(feature = "derive-serde") {
-            quote! { #[derive(::serde::Serialize, ::serde::Deserialize)] }
+            //let _ = std::process::Command::new("notify-send").arg("rosrust/derive-serde is enabled!").spawn();
+            quote! {
+                // feature rosrust/derive-serde is enabled, derive the traits
+                #[cfg_attr(feature = "rosmsg_serde_derive", derive(::serde::Serialize, ::serde::Deserialize))]
+            }
         } else {
-            quote! {}
+            //let _ = std::process::Command::new("notify-send").arg("rosrust/derive-serde is disabled!").spawn();
+            quote! {
+                // feature rosrust/derive-serde is disabled
+            }
         };
 
         quote! {
@@ -222,6 +229,7 @@ impl Msg {
             return quote! {};
         }
         quote! {
+            #[cfg(not(target_arch = "wasm32"))]
             fn set_header(
                 &mut self,
                 clock: &::std::sync::Arc<#crate_prefix Clock>,

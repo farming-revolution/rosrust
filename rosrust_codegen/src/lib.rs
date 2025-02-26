@@ -3,8 +3,6 @@
 extern crate proc_macro;
 
 mod alerts;
-#[cfg(feature="derive-serde")]
-use serde;
 mod error;
 mod genmsg;
 mod helpers;

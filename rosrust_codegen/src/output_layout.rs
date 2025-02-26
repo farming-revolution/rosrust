@@ -131,7 +131,7 @@ impl Service {
         let res_ident = Ident::new(&format!("{}Res", name), Span::call_site());
 
         let serde_derives = if cfg!(feature = "derive-serde") {
-            quote! { #[derive(::serde::Serialize, ::serde::Deserialize)] }
+            quote! { #[cfg_attr(feature = "rosmsg_serde_derive", derive(::serde::Serialize, ::serde::Deserialize))] }
         } else {
             quote! {}
         };
