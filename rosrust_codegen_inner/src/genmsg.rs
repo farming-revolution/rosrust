@@ -15,7 +15,7 @@ pub fn depend_on_messages(
     message_map_to_layout(&message_map)
 }
 
-fn message_names_to_message_map(
+pub fn message_names_to_message_map(
     ignore_bad_messages: bool,
     folders: &[&str],
     messages: &[&str],

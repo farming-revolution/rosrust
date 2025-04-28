@@ -1,5 +1,5 @@
 use crate::error::{Result, ResultExt};
-use crate::{Duration, RosMsg, Time};
+use crate::{Duration, Message, RosMsg, Time};
 use lazy_static::lazy_static;
 use regex::RegexBuilder;
 use ros_message::{DataType, FieldCase, FieldInfo, MessagePath, MessageValue, Msg, Value};
@@ -10,8 +10,9 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct DynamicMsg {
-    msg: Msg,
-    dependencies: HashMap<MessagePath, Msg>,
+    // todo make private again and define better constructor
+    pub msg: Msg,
+    pub dependencies: HashMap<MessagePath, Msg>,
 }
 
 fn get_field<'a>(value: &'a MessageValue, name: &str) -> io::Result<&'a Value> {

@@ -67,7 +67,7 @@ impl<T: Message> Publisher<T> {
     }
 
     #[inline]
-    pub fn set_latching(&mut self, latching: bool) {
+    pub fn set_latching(&self, latching: bool) {
         self.stream.set_latching(latching);
     }
 
