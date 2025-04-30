@@ -1,5 +1,5 @@
 use crate::{Message, RosMsg, ServicePair};
-use std::io;
+use std::{any::{Any, TypeId}, io, net::TcpStream};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RawMessage(pub Vec<u8>);
