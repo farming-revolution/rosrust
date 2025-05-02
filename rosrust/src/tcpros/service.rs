@@ -181,9 +181,9 @@ where
     // Receive request from client
     'request_loop: loop {
         let length = stream.read_u32::<LittleEndian>()?;
-        let mut req_buf = vec![0u8; length];
+        let mut req_buf = vec![0u8; length as usize];
         stream.read_exact(&mut req_buf)?;
-        match RosMsg::decode(&req_buf) {
+        match RosMsg::decode(req_buf.as_slice()) {
             Ok(req) => {
                 // Call function that handles request and returns response
                 match handler(req) {
