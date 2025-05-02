@@ -232,7 +232,7 @@ impl Msg {
             #[cfg(not(target_arch = "wasm32"))]
             fn set_header(
                 &mut self,
-                clock: &::std::sync::Arc<#crate_prefix Clock>,
+                clock: &::std::sync::Arc<dyn #crate_prefix Clock>,
                 seq: &::std::sync::Arc<::std::sync::atomic::AtomicUsize>,
             ) {
                 if self.header.seq == 0 {

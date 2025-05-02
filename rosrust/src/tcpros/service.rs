@@ -1,11 +1,13 @@
 use super::error::{ErrorKind, Result};
-use super::header;
+use super::header::{self, decode};
 use super::util::tcpconnection;
 use super::{ServicePair, ServiceResult};
 use crate::rosmsg::{encode_str, RosMsg};
+use crate::RawMessage;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use error_chain::bail;
 use log::error;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::io;
 use std::net::{TcpListener, TcpStream};
@@ -102,36 +104,50 @@ where
     T: ServicePair,
     U: std::io::Write + std::io::Read,
 {
-    let req_type = read_request::<T, U>(stream, service)?;
-    write_response::<T, U>(stream, node_name)?;
+    let (req_type, requested_md5sum, requested_type) = read_request::<T, U>(stream, service)?;
+    write_response::<T, U>(stream, node_name, requested_md5sum, requested_type)?;
     Ok(req_type)
 }
 
 fn read_request<T: ServicePair, U: std::io::Read>(
     stream: &mut U,
     service: &str,
-) -> Result<RequestType> {
+) -> Result<(RequestType, String, String)> {
     let fields = header::decode(stream)?;
     header::match_field(&fields, "service", service)?;
     if fields.get("callerid").is_none() {
         bail!(ErrorKind::HeaderMissingField("callerid".into()));
     }
     if header::match_field(&fields, "probe", "1").is_ok() {
-        return Ok(RequestType::Probe);
+        return Ok((RequestType::Probe, "".to_owned(), "".to_owned()));
     }
-    header::match_field(&fields, "md5sum", &T::md5sum())?;
-    Ok(RequestType::Action)
+    if TypeId::of::<T>() != TypeId::of::<RawMessage>() {
+        header::match_field(&fields, "md5sum", &T::md5sum())?;
+    }
+    Ok((
+        RequestType::Action,
+        fields.get("md5sum").cloned().unwrap_or_else(|| "*".to_owned()),
+        fields.get("type").cloned().unwrap_or_else(|| "*".to_owned())
+    ))
 }
 
-fn write_response<T, U>(stream: &mut U, node_name: &str) -> Result<()>
+fn write_response<T, U>(stream: &mut U, node_name: &str, requested_md5sum : String, requested_type: String) -> Result<()>
 where
     T: ServicePair,
     U: std::io::Write,
 {
     let mut fields = HashMap::<String, String>::new();
     fields.insert(String::from("callerid"), String::from(node_name));
-    fields.insert(String::from("md5sum"), T::md5sum());
-    fields.insert(String::from("type"), T::msg_type());
+    if TypeId::of::<T>() == TypeId::of::<RawMessage>() {
+        // If we're operating as a RawMessage service, just tell the
+        // client whatever it wants to hear and let our handler deal
+        // with the fallout if that doesn't line up.
+        fields.insert(String::from("md5sum"), requested_md5sum);
+        fields.insert(String::from("type"), requested_type);
+    } else {
+        fields.insert(String::from("md5sum"), T::md5sum());
+        fields.insert(String::from("type"), T::msg_type());
+    }
     header::encode(stream, &fields)?;
     Ok(())
 }
@@ -163,35 +179,41 @@ where
     F: Fn(T::Request) -> ServiceResult<T::Response>,
 {
     // Receive request from client
-    // TODO: validate message length
-    let _length = stream.read_u32::<LittleEndian>();
-    // Break out of loop in case of failure to read request
-    // TODO: handle retained connections
-    if let Ok(req) = RosMsg::decode(&mut stream) {
-        // Call function that handles request and returns response
-        match handler(req) {
-            Ok(res) => {
-                // Send True flag and response in case of success
-                stream.write_u8(1)?;
-                let mut writer = io::Cursor::new(Vec::with_capacity(128));
-                // skip the first 4 bytes that will contain the message length
-                writer.set_position(4);
+    'request_loop: loop {
+        let length = stream.read_u32::<LittleEndian>()?;
+        let mut req_buf = vec![0u8; length as usize];
+        stream.read_exact(&mut req_buf)?;
+        match RosMsg::decode(req_buf.as_slice()) {
+            Ok(req) => {
+                // Call function that handles request and returns response
+                match handler(req) {
+                    Ok(res) => {
+                        // Send True flag and response in case of success
+                        stream.write_u8(1)?;
+                        let mut writer = io::Cursor::new(Vec::with_capacity(128));
+                        // skip the first 4 bytes that will contain the message length
+                        writer.set_position(4);
 
-                res.encode(&mut writer)?;
+                        res.encode(&mut writer)?;
 
-                // write the message length to the start of the header
-                let message_length = (writer.position() - 4) as u32;
-                writer.set_position(0);
-                message_length.encode(&mut writer)?;
+                        // write the message length to the start of the header
+                        let message_length = (writer.position() - 4) as u32;
+                        writer.set_position(0);
+                        message_length.encode(&mut writer)?;
 
-                stream.write_all(&writer.into_inner())?;
+                        stream.write_all(&writer.into_inner())?;
+                    }
+                    Err(message) => {
+                        // Send False flag and error message string in case of failure
+                        stream.write_u8(0)?;
+                        RosMsg::encode(&message, &mut stream)?;
+                    }
+                };
+            },
+            Err(e) => {
+                break 'request_loop;
             }
-            Err(message) => {
-                // Send False flag and error message string in case of failure
-                stream.write_u8(0)?;
-                RosMsg::encode(&message, &mut stream)?;
-            }
-        };
+        }
     }
 
     // Upon failure to read request, send client failure message

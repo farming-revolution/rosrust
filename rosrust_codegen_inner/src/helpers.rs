@@ -87,6 +87,7 @@ pub fn generate_message_definition<S: std::hash::BuildHasher>(
     Ok(result)
 }
 
+#[derive(Debug)]
 pub struct MessageMap {
     pub messages: HashMap<MessagePath, Msg>,
     pub services: HashMap<MessagePath, Srv>,

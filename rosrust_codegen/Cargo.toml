@@ -1,30 +1,14 @@
 [package]
-edition = "2018"
-authors = ["Adnan Ademovic <adnanademovic100@gmail.com>"]
-description = "Message generation for rosrust"
-license = "MIT"
 name = "rosrust_codegen"
-readme = "README.md"
-repository = "https://github.com/adnanademovic/rosrust"
 version = "0.9.6"
-
+edition = "2024"
 
 [features]
-derive-serde = ["serde", "serde/derive"]
+derive-serde = ["rosrust_codegen_inner/derive-serde", "serde", "serde/derive"]
 
-
-[dependencies]
-error-chain = "0.12.4"
-lazy_static = "1.4.0"
-quote = "1.0.9"
-syn = "1.0.74"
-proc-macro2 = "1.0.28"
-md-5 = "0.9.1"
-hex = "0.4.3"
-
-[dependencies.ros_message]
-path = "../ros_message"
-version = "0.1.0"
+[dependencies.rosrust_codegen_inner]
+path = "../rosrust_codegen_inner"
+version = "0.9.6"
 
 [dependencies.serde]
 version = "1"

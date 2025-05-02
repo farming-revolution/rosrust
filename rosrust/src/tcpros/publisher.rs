@@ -268,7 +268,7 @@ impl<T: Message> PublisherStream<T> {
     }
 
     #[inline]
-    pub fn set_latching(&mut self, latching: bool) {
+    pub fn set_latching(&self, latching: bool) {
         self.latching.store(latching, atomic::Ordering::SeqCst);
     }
 

@@ -1,14 +1,4 @@
-#![recursion_limit = "1024"]
-
 extern crate proc_macro;
-
-mod alerts;
-mod error;
-mod genmsg;
-mod helpers;
-mod msg;
-mod output_layout;
-mod rosmsg_include;
 
 use proc_macro::TokenStream;
 
@@ -31,5 +21,5 @@ pub fn rosmsg_include(input: TokenStream) -> TokenStream {
         messages.push(next_item);
     }
     let message_refs = messages.iter().map(String::as_str).collect::<Vec<&str>>();
-    rosmsg_include::depend_on_messages(&message_refs, is_internal, ignore_bad)
+    rosrust_codegen_inner::rosmsg_include::depend_on_messages(&message_refs, is_internal, ignore_bad)
 }
