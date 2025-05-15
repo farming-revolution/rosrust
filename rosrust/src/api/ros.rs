@@ -1,6 +1,6 @@
 use super::super::rosxmlrpc::Response;
 use super::clock::{Clock, Rate, RealClock, SimulatedClock};
-use super::error::{Error, ErrorKind, Result, ResultExt};
+use super::error::{Error, ErrorKind, ResponseError, Result, ResultExt};
 use super::master::{self, Master, Topic};
 use super::naming::{self, Resolver};
 use super::raii::{Publisher, Service, Subscriber};
@@ -391,7 +391,20 @@ impl Ros {
     }
 
     pub(crate) fn subscribe_param<'a, T: Deserialize<'a>>(&self, key : &str, callback: Arc<dyn Fn()->() + Send + Sync>) -> Result<()> {
-        self.master.subscribe_param::<T>(key)?;
+        let res = self.master.subscribe_param::<T>(key);
+        match res {
+            Ok(_) => {},
+            Err(ResponseError::Server(ref reason)) => {
+                if reason.starts_with("Response data has unexpected structure") {
+                    // this case is fine, we probably subscribed to a float and it's set to int or something
+                } else {
+                    res?;
+                }
+            }
+            r => {
+                r?;
+            }
+        }
         let key = self.resolver.translate(key)?;
         
         let mut callbacks = self.slave.param_callbacks.lock().unwrap();
