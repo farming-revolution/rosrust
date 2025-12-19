@@ -531,7 +531,11 @@ impl Parameter {
 
     pub fn get<'b, T: Deserialize<'b>>(&self) -> Response<T> {
         let data = self.get_raw()?;
-        Deserialize::deserialize(data).map_err(bad_response_structure)
+        let res = Deserialize::deserialize(data);
+        if let Err(ref e) = res {
+            eprintln!("{:?}", e);
+        }
+        res.map_err(bad_response_structure)
     }
 
     pub fn get_raw(&self) -> Response<xml_rpc::Value> {
