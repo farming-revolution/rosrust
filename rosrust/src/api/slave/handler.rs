@@ -3,7 +3,7 @@ use super::subscriptions::SubscriptionsTracker;
 use crate::rosxmlrpc::{self, Response, ResponseError, Server};
 use crate::tcpros::Service;
 use crate::util::{kill, FAILED_TO_LOCK};
-use log::{error, info};
+use log::{error, info, debug};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -178,7 +178,7 @@ impl SlaveHandler {
 
             for (subscribed_param_name, cb) in callbacks.iter() {
                 if one_is_prefix_of_other(key, subscribed_param_name.as_str()) {
-                    info!("param '{key}' changed, notifying subscriber of '{subscribed_param_name}' at address: {:p}", &*cb);
+                    debug!("param '{key}' changed, notifying subscriber of '{subscribed_param_name}' at address: {:p}", &*cb);
                     cb();
                 }
             }
