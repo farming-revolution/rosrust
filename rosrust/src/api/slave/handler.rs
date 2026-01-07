@@ -3,7 +3,7 @@ use super::subscriptions::SubscriptionsTracker;
 use crate::rosxmlrpc::{self, Response, ResponseError, Server};
 use crate::tcpros::Service;
 use crate::util::{kill, FAILED_TO_LOCK};
-use log::{error, info};
+use log::{error, info, debug};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -160,10 +160,25 @@ impl SlaveHandler {
                 .data
                 .retain(|k, _| !k.starts_with(key) && !key.starts_with(k));
 
-            let callbacks = param_callbacks.lock().unwrap();            
+            let callbacks = param_callbacks.lock().unwrap();
+
+            /// helper to get the //elements/of//the/param/name/ → [elements, of, the, param, name]
+            fn get_path_elements(s : &str) -> impl Iterator<Item = &str> {
+                s.split('/').filter(|e| *e != "/" && e.len() > 0)
+            }
+
+            /// prefix checking, so that we can notify
+            /// - a subscriber of /foo/bar if /foo changes
+            /// - a subscriber of /foo if /foo/bar changes
+            fn one_is_prefix_of_other(a : &str, b : &str) -> bool {
+                let a = get_path_elements(a);
+                let b = get_path_elements(b);
+                a.zip(b).all(|(ai, bi)| ai==bi)
+            }
+
             for (subscribed_param_name, cb) in callbacks.iter() {
-                if subscribed_param_name.as_str() == key {
-                    //println!("prefix: '{subscribed_param_name}'\npointer: {:p}", &*cb);
+                if one_is_prefix_of_other(key, subscribed_param_name.as_str()) {
+                    debug!("param '{key}' changed, notifying subscriber of '{subscribed_param_name}' at address: {:p}", &*cb);
                     cb();
                 }
             }
