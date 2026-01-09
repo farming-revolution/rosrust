@@ -145,7 +145,7 @@ impl Service {
             impl #crate_prefix Message for #name_ident {
                 #[inline]
                 fn msg_definition() -> ::std::string::String {
-                    String::new()
+                    ::std::string::String::new()
                 }
 
                 #[inline]
