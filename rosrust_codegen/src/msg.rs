@@ -75,15 +75,24 @@ impl Msg {
         
         let call = Ident::new("include_str", Span::call_site());
         let excl = Punct::new('!', Spacing::Alone);
-        let inside = Literal::string(self.0.get_file_path().canonicalize().unwrap().to_str().unwrap());
         
-        let fn_definition = if self.0.get_file_path().exists() {
+        fn check_path(msg: &Msg) -> std::option::Option<String> {
+            let p = msg.0.get_file_path();
+            if !p.exists() {
+                return None
+            }
+            Some(p.canonicalize().ok()?.to_str()?.to_owned())
+        }
+        
+        let fn_definition = if let Some(s) = check_path(self) {
+            let inside = Literal::string(s.as_str());
             quote!{
                 #call #excl (#inside)
             }
         } else {
+            let s = self.0.source();
             quote!{
-                self.get_definition()
+                #s
             }
         };
         
