@@ -224,7 +224,7 @@ impl<T: Write + Send + 'static> SenderSingleSubscriber<T> {
                                 remainder = None;
                             }
                             Ok(num_bytes_written) => {
-                                *idx += num_bytes_total;
+                                *idx += num_bytes_written;
                                 continue;
                             }
                             Err(e) => match e.kind() {
